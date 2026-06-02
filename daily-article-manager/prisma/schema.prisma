@@ -1,0 +1,76 @@
+// Datasource is SQLite by default for zero-setup local dev.
+// To switch to Supabase/Postgres: change provider to "postgresql"
+// and set DATABASE_URL to your Postgres connection string. No app code changes.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// A single ingested + (later) enriched topic for a given day.
+model Topic {
+  id           String   @id @default(cuid())
+  title        String
+  summary      String?
+  url          String
+  source       String // adapter id, e.g. "newsapi" | "rss:<feed>"
+  sourceName   String? // human label, e.g. outlet name
+  publishedAt  DateTime?
+  rawKeywords  String   @default("[]") // JSON-encoded string[]
+  fetchedDate  String // YYYY-MM-DD bucket for daily querying
+  dedupeKey    String // normalized title hash for dedupe
+
+  // Phase 3 user actions (present now so UI can rely on them)
+  starred      Boolean  @default(false)
+  dismissed    Boolean  @default(false)
+
+  // Phase 2 enrichment is attached via relation (added later)
+  enrichment   Enrichment?
+
+  createdAt    DateTime @default(now())
+
+  @@unique([fetchedDate, dedupeKey])
+  @@index([fetchedDate])
+  @@index([source])
+}
+
+// Phase 2 placeholder — created now so the schema is stable.
+model Enrichment {
+  id                     String  @id @default(cuid())
+  topicId                String  @unique
+  topic                  Topic   @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  category               String?
+  subTopics              String  @default("[]") // JSON string[]
+  trendingScore          Int     @default(0)
+  idealClientNiche       String?
+  positioningCredentials String?
+  suggestedAngle         String?
+  researchSources        String  @default("[]") // JSON string[]
+  model                  String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}
+
+// User-editable RSS feed list.
+model RssFeed {
+  id        String   @id @default(cuid())
+  url       String   @unique
+  label     String?
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+// Per-source run health, surfaced in Settings.
+model SourceRun {
+  id         String   @id @default(cuid())
+  source     String
+  ok         Boolean
+  itemCount  Int      @default(0)
+  error      String?
+  ranAt      DateTime @default(now())
+
+  @@index([source])
+}
